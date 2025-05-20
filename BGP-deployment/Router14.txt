@@ -264,3 +264,51 @@ address-family ipv6
 neighbor 2001:DB8:4:5::1 remote-as 64501
 neighbor 2001:DB8:4:5::1 route-map AS64504-v6out out
 neighbor 2001:DB8:4:5::1 send-community
+
+# BGP Route Filtering Lab - BGP Communities
+# cleanup
+router bgp 64504
+address-family ipv4
+no neighbor 100.68.4.9 route-map AS64504-v4out out
+address-family ipv6
+no neighbor 2001:DB8:4:5::1 route-map AS64504-v6out out
+
+no route-map AS64504-v4out
+no route-map AS64504-v6out
+
+no ip prefix-list AS64504-v4
+no ipv6 prefix-list AS64504-v6
+
+
+route-map community-tag permit 10
+set community 64504:14
+
+router bgp 64504
+address-family ipv4
+neighbor 100.68.4.96 mask 255.255.255.240 route-map community-tag
+neighbor 100.68.4.9 remote-as 64502
+neighbor 100.68.4.9 send-community
+
+address-family ipv6
+network 2001:DB8:4:400::/56 route-map community-tag
+neighbor 2001:DB8:4:5::1 remote-as 64502
+neighbor 2001:DB8:4:5::1 send-community
+
+ip route 100.68.4.96 255.255.255.240 null0
+ipv6 route 2001:DB8:4:400::/56 null0
+
+ip community-list standard R2 permit 64501:2
+route-map AS64501-in permit 10
+match community R2
+
+router bgp 64504
+address-family ipv4
+neighbor 100.68.4.9 route-map AS64501-in in
+
+address-family ipv6
+neighbour 2001:DB8:4:5::1 route-map AS64501-in in
+
+route-map AS64501-in permit 10
+match community R2
+set local-preference 120
+route-map AS64501-in permit 20
