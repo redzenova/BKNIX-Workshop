@@ -1,0 +1,64 @@
+
+config terminal
+hostname Router14
+
+no ip domain-lookup
+ip domain name ws.nsrc.org
+
+line con 0
+transport perferred none
+exec-timeout 30 0
+escape-character 3
+
+line aux 0
+transport preferred none
+exec-timeout 30 0
+escape-character 3
+
+line vty 0 4
+transport preferred none
+exec-timeout 30 0
+escape-character 3
+
+username isplab algorithm-type scrypt secret lab-PW
+enable algorithm-type scrypt secret lab-EN
+service password-encryption
+
+aaa new-model
+aaa authentication login default local
+aaa authentication enable default enable
+
+no logging console
+logging buffered 8192 debugging
+
+# Activate IPv6 routing
+ipv6 unicast-routing
+
+# Disable source routing for IPv4 and IPv6
+no ip source-route
+no ipv6 source-route
+
+# Turn off Built-in Web Server
+no ip http server
+no ip http secure-server
+
+# Path MTU Discovery
+ip tcp path-mtu-discovery
+
+# Banner MOTD
+banner login ^
+           BGP Deployment Workshop Lab
+         Network Startup Resource Center
+^
+
+
+# SSH Configuration
+crypto key generate rsa modulus 2048
+ip ssh version 2
+
+line vty 0 4
+transport input ssh
+
+# Save the configuration
+end
+write memory

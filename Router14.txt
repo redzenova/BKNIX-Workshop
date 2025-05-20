@@ -1,0 +1,266 @@
+
+
+config terminal
+
+# Config interface
+interface Loopback0
+ip address 100.68.4.254 255.255.255
+no ip redirects
+no ip proxy-arp
+ipv6 address 2001:DB8:4::4/128
+ipv6 nd prefix default no-advertise
+ipv6 nd ra suppress all
+load-interval 30
+no shutdown
+
+interface GigabitEthernet0/0
+description P2P Link to Router13
+ip address 100.68.4.7 255.255.255.254
+no ip redirects
+no ip proxy-arp
+ipv6 address 2001:DB8:4:4::1/127
+ipv6 nd prefix default no-advertise
+ipv6 nd ra suppress all
+load-interval 30
+no shutdown
+
+interface GigabitEthernet0/1
+description P2P Link to Router2
+ip address 100.68.4.8 255.255.255.254
+no ip redirects
+no ip proxy-arp
+ipv6 address 2001:DB8:4:5::0/127
+ipv6 nd prefix default no-advertise
+ipv6 nd ra suppress all
+load-interval 30
+no shutdown
+
+interface GigabitEthernet0/3
+description P2P Link to Router12
+ip address 100.68.4.4 255.255.255.254
+no ip redirects
+no ip proxy-arp
+ipv6 address 2001:DB8:4:3::0/127
+ipv6 nd prefix default no-advertise
+ipv6 nd ra suppress all
+load-interval 30
+no shutdown
+
+# Config routing
+# ISIS
+key chain isis-key
+key 1
+key-string group4
+
+router isis as6450X
+net 49.0001.0004.0004.00
+authentication mode md5 level-2
+authentication key-chain isis-key level-2
+is-type level-2-only
+metric-style wide
+metric 100000
+log-adjacency-changes
+set-overload-bit on-startup wait-for-bgp
+
+address-family ipv6
+multi-topology
+metric 100000
+set-overload-bit on-startup wait-for-bgp
+exit
+
+# IS-IS must be configured on internal interfaces only
+interface GigabitEthernet0/0
+isis network point-to-point
+ip router isis as64504
+ipv6 router isis as64504
+isis metric 2
+isis ipv6 metric 2
+
+interface GigabitEthernet0/3
+isis network point-to-point
+ip router isis as64504
+ipv6 router isis as64504
+isis metric 2
+isis ipv6 metric 2
+exit
+
+router isis as64504
+passive-interface Loopback0
+exit
+
+ip ssh source-interface Loopback0
+
+#IBGP
+router bgp 64504
+bgp log-neighbor-changes
+bgp deterministic-med
+no bgp default ipv4-unicast
+
+address-family ipv4
+distance bgp 200 200 200
+exit
+address-family ipv6
+distance bgp 200 200 200
+exit
+
+router bgp 64504
+address-family ipv4
+neighbor rr-v4 peer-group
+neighbor rr-v4 remote-as 64504
+neighbor rr-v4 update-source Loopback0
+neighbor rr-v4 next-hop-self
+neighbor rr-v4 description IBGP with Route Reflector
+neighbor rr-v4 password group4-PW
+
+address-family ipv6
+neighbor rr-v6 peer-group
+neighbor rr-v6 remote-as 6450X
+neighbor rr-v6 update-source Loopback0
+neighbor rr-v6 next-hop-self
+neighbor rr-v6 description IBGP with Route Reflector
+neighbor rr-v6 password group4-PW
+
+# Peer with Router13(The Route Reflector)
+router bgp 64504
+address-family ipv4
+neighbor 100.68.4.253 peer-group rr-v4
+neighbor 100.68.4.253 description IBGP with Router13
+neighbor 100.68.4.253 activate
+
+address-family ipv6
+neighbor 2001:DB8:4::3 peer-group rr-v6
+neighbor 2001:DB8:4::3 description IBGP with Router13
+neighbor 2001:DB8:4::3 activate
+
+# EBGP
+router bgp 64504
+address-family ipv4
+neighbor 100.68.4.9 remote-as 64501
+neighbor 100.68.4.9 description EBGP with Router2
+neighbor 100.68.4.9 password BGP-PW
+neighbor 100.68.4.9 activate
+
+address-family ipv6
+neighbor 2001:DB8:4:5::1 remote-as 64501
+neighbor 2001:DB8:4:5::1 description EBGP with Router2
+neighbor 2001:DB8:4:5::1 password BGP-PW
+neighbor 2001:DB8:4:5::1 activate
+
+
+# Turn on dns resolution
+ip name-server 100.64.0.1
+ip domain lookup source-interface Loopback0
+
+# Add a Customer Route
+## Announcing a customer route
+
+ip route 100.68.4.96 255.255.255.240 Null0
+ipv6 route 2001:DB8:4:400::/56 Null0
+
+router bgp 64504
+address-family ipv4
+network 100.68.4.96 mask 255.255.255.240
+address-family ipv6
+network 2001:DB8:4:400::/56
+exit 
+
+
+#BGP Route Filtering Lab - Prefix Lists
+
+ip prefix-list AS64504-v4 permit 100.68.4.0/24
+ip prefix-list AS64504-v4 deny 0.0.0.0/0 le 32
+
+ip prefix-list AS64501-v4 permit 100.68.1.0/24
+ip prefix-list AS64501-v4 deny 0.0.0.0/0 le 32
+
+ipv6 prefix-list AS64504-v6 permit 2001:DB8:4::/48
+ipv6 prefix-list AS64504-v6 deny ::/0 le 128
+
+ipv6 prefix-list AS64501-v6 permit 2001:DB8:1::/48
+ipv6 prefix-list AS64501-v6 deny ::/0 le 128
+
+router bgp 64504
+address-family ipv4
+neighbor 100.68.4.9 remote-as 64501
+neighbor 100.68.4.9 description EBGP peering with Router1
+neighbor 100.68.4.9 prefix-list AS64504-v4 out
+neighbor 100.68.4.9 prefix-list AS64501-v4 in
+
+address-family ipv6
+neighbor 2001:DB8:4:5::1 remote-as 64501
+neighbor 2001:DB8:4:5::1 description EBGP peering with Router1
+neighbor 2001:DB8:4:5::1 prefix-list AS64504-v6 out
+neighbor 2001:DB8:4:5::1 prefix-list AS64501-v6 in
+
+# BGP Route Filtering Lab - AS Path
+# cleanup
+router bgp 64504
+address-family ipv4
+no neighbor 100.68.4.9 prefix-list AS64504-v4 out
+no neighbor 100.68.4.9 prefix-list AS64501-v4 in
+address-family ipv6
+no neighbor 2001:DB8:4:5::1 prefix-list AS64504-v6 out
+no neighbor 2001:DB8:4:5::1 prefix-list AS64501-v6 in
+
+no ip prefix-list AS64504-v4
+no ip prefix-list AS64501-v4
+no ipv6 prefix-list AS64504-v6
+no ipv6 prefix-list AS64501-v6
+
+clear bgp all 64501 in
+clear bgp all 64501 out
+
+ip as-path access-list 1 permit ^$
+ip as-path access-list 1 deny .*
+
+ip as-path access-list 2 permit ^64501$
+ip as-path access-list 2 deny .*
+
+router bgp 64504
+address-family ipv4
+neighbor 100.68.4.9 filter-list 1 out
+neighbor 100.68.4.9 filter-list 2 in
+
+address-family ipv6
+network 2001:DB8:4::/48
+neighbor 2001:DB8:4:5::1 filter-list 1 out
+neighbor 2001:DB8:4:5::1 filter-list 2 in
+
+
+# BGP Route Filtering Lab - Route Maps
+# cleanup
+router bgp 64504
+address-family ipv4
+no neighbor 100.68.4.9 filter-list 1 out
+no neighbor 100.68.4.9 filter-list 2 in
+address-family ipv6
+no neighbor 2001:DB8:4:5::1 filter-list 1 out
+no neighbor 2001:DB8:4:5::1 filter-list 2 in
+
+no ip as-path access-list 1
+no ip as-path access-list 2
+
+ip bgp-community new-format
+
+ip prefix-list AS64504-v4 permit 100.68.4.0/24 le 28
+
+route-map AS64504-v4out permit 10
+match ip address prefix-list AS64504-v4
+set community 64504:14
+
+ipv6 prefix-list AS64504-v6 permit 2001:DB8:4::/48 le 56
+
+route-map AS64504-v6out permit 10
+match ipv6 address prefix-list AS64504-v6
+set community 64504:14
+
+router bgp 64504
+address-family ipv4
+neighbor 100.68.4.9 remote-as 64501
+neighbor 100.68.4.9 route-map AS64504-v4out out
+neighbor 100.68.4.9 send-community
+
+address-family ipv6
+neighbor 2001:DB8:4:5::1 remote-as 64501
+neighbor 2001:DB8:4:5::1 route-map AS64504-v6out out
+neighbor 2001:DB8:4:5::1 send-community
