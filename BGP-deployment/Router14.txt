@@ -288,11 +288,13 @@ address-family ipv4
 neighbor 100.68.4.96 mask 255.255.255.240 route-map community-tag
 neighbor 100.68.4.9 remote-as 64502
 neighbor 100.68.4.9 send-community
+neighbor rr-v4 send-community
 
 address-family ipv6
 network 2001:DB8:4:400::/56 route-map community-tag
 neighbor 2001:DB8:4:5::1 remote-as 64502
 neighbor 2001:DB8:4:5::1 send-community
+neighbor rr-v6 send-community
 
 ip route 100.68.4.96 255.255.255.240 null0
 ipv6 route 2001:DB8:4:400::/56 null0
@@ -312,3 +314,95 @@ route-map AS64501-in permit 10
 match community R2
 set local-preference 120
 route-map AS64501-in permit 20
+
+====================================
+
+# BGP Policy Lab - Local Preference (For outbound traffic)
+# cleanup
+router bgp 64504
+address-family ipv4
+no neighbor <v4-ebgp-peer> route-map AS6450Y-in in
+no network 100.68.X.0 mask 255.255.255.0 route-map community-tag
+network 100.68.X.0 mask 255.255.255.0
+
+address-family ipv6
+no neighbor <v6-ebgp-peer> route-map AS6450Y-in in
+no network 2001:DB8:X::/48 route-map community-tag
+network 2001:DB8:X::/48
+
+no route-map community-tag
+no route-map AS6450Y-in
+no ip community-list standard AS6450Y
+
+interface Loopback1
+description Routing Policy Target Address
+ip address 100.68.4.80 255.255.255.255
+ipv6 address 2001:DB8:4:400::0/128
+
+
+ip prefix-list R3-v4prefix permit 100.68.1.64/28
+ip prefix-list R9-v4prefix permit 100.68.3.48/28
+
+route-map R2-v4localpref permit 10
+match ip address prefix-list R9-v4prefix
+set local-preference 50
+
+route-map R2-v4localpref permit 20
+match ip address prefix-list R3-v4prefix
+set local-preference 200
+
+route-map R2-v4localpref permit 30
+
+ipv6 prefix-list R3-v6prefix permit 2001:DB8:1:300::/56
+ipv6 prefix-list R9-v6prefix permit 2001:DB8:3:200::/56
+
+route-map R2-v6localpref permit 10
+match ipv6 address prefix-list R9-v6prefix
+set local-preference 50
+
+route-map R2-v6localpref permit 20
+match ipv6 address prefix-list R3-v6prefix
+set local-preference 200
+
+route-map R2-v6localpref permit 30
+
+router bgp 64504
+address-family ipv4
+network 100.68.4.80 mask 255.255.255.240
+neighbor 100.68.4.9 remote-as 64501
+neighbor 100.68.4.9 route-map R2-v4localpref in
+
+address-family ipv6
+network 2001:DB8:4:400::/56
+neighbor 2001:DB8:4:5::1 remote-as 64503
+neighbor 2001:DB8:4:5::1 route-map R9-v6localpref in
+
+
+# BGP Policy Lab - MEDs (For inbound traffic)
+# high metric low priority | low metric high priority
+# cleanup
+
+
+ip prefix-list R12-v4prefix permit 100.68.4.48/28
+ipv6 prefix-list R12-v6prefix permit 2001:DB8:2:200::/56
+
+route-map R2-v4med permit 10
+match ip address prefix-list R5-v4prefix
+set metric 200
+
+route-map R2-v4med permit 20
+
+route-map R2-v6med permit 10
+match ipv6 address prefix-list R5-v6prefix
+set metric 200
+
+route-map R2-v6med permit 20
+
+router bgp 64504
+address-family ipv4
+neighbor 100.68.4.9 remote-as 64501
+neighbor 100.68.4.9 route-map R2-v4med out
+
+address-family ipv6
+neighbor 2001:DB8:4:5::1 remote-as 64503
+neighbor 2001:DB8:4:5::1 route-map R2-v6med out
